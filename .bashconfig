@@ -1,0 +1,6 @@
+source /opt/ros/jazzy/setup.bash
+source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash
+source /workspaces/gazebo_ws/install/setup.bash
+
+export DISPLAY=${DISPLAY}
+export XAUTHORITY=/tmp/.X11-unix

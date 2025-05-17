@@ -1,0 +1,357 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <world name="walled_world">
+
+    <gravity>0 0 -9.8</gravity>
+
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+
+    <scene>
+      <ambient>0.5 0.5 0.5 1</ambient>
+    </scene>
+
+
+    <light name="sun" type="directional">
+      <cast_shadows>1</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+<!-- 
+    <model name='ground_plane'>
+        <static>true</static>
+        <link name='link'>
+          <collision name='collision'>
+            <geometry>
+              <plane>
+                <normal>0 0 1</normal>
+                <size>100 100</size>
+              </plane>
+            </geometry>
+            <surface>
+              <friction>
+                <ode/>
+              </friction>
+              <bounce/>
+              <contact/>
+            </surface>
+          </collision>
+          <visual name='visual'>
+            <geometry>
+              <plane>
+                <normal>0 0 1</normal>
+                <size>100 100</size>
+              </plane>
+            </geometry>
+            <material>
+              <ambient>0.800000012 0.800000012 0.800000012 1</ambient>
+              <diffuse>0.800000012 0.800000012 0.800000012 1</diffuse>
+              <specular>0.800000012 0.800000012 0.800000012 1</specular>
+            </material>
+          </visual>
+          <pose>0 0 0 0 0 0</pose>
+          <inertial>
+            <pose>0 0 0 0 0 0</pose>
+            <mass>1</mass>
+            <inertia>
+              <ixx>1</ixx>
+              <ixy>0</ixy>
+              <ixz>0</ixz>
+              <iyy>1</iyy>
+              <iyz>0</iyz>
+              <izz>1</izz>
+            </inertia>
+          </inertial>
+          <enable_wind>false</enable_wind>
+        </link>
+        <pose>0 0 0 0 0 0</pose>
+        <self_collide>false</self_collide>
+      </model> -->
+
+      <include>
+        <uri>model://grasspatch</uri>
+        <name>Grass1</name>
+        <pose>0 0 0 0 0 0</pose> <!-- Optional: adjust if needed -->
+      </include>
+
+      <include>
+        <uri>model://grasspatch</uri>
+        <name>Grass2</name>
+        <pose>-15 0 0 0 0 0</pose> <!-- Optional: adjust if needed -->
+      </include>
+
+      <include>
+        <uri>model://grasspatch</uri>
+        <name>Grass3</name>
+        <pose>15 0 0 0 0 0</pose> <!-- Optional: adjust if needed -->
+      </include>
+
+      <include>
+        <uri>model://grasspatch</uri>
+        <name>Grass4</name>
+        <pose>0 15 0 0 0 0</pose> <!-- Optional: adjust if needed -->
+      </include>
+
+      <include>
+        <uri>model://grasspatch</uri>
+        <name>Grass9</name>
+        <pose>15 15 0 0 0 0</pose> <!-- Optional: adjust if needed -->
+      </include>
+
+      <include>
+        <uri>model://grasspatch</uri>
+        <name>Grass5</name>
+        <pose>-15 -15 0 0 0 0</pose> <!-- Optional: adjust if needed -->
+      </include>
+
+      <include>
+        <uri>model://grasspatch</uri>
+        <name>Grass7</name>
+        <pose>15 -15 0 0 0 0</pose> <!-- Optional: adjust if needed -->
+      </include>
+
+      <include>
+        <uri>model://grasspatch</uri>
+        <name>Grass8</name>
+        <pose>-15 15 0 0 0 0</pose> <!-- Optional: adjust if needed -->
+      </include>
+
+      <include>
+        <uri>model://grasspatch</uri>
+        <name>Grass6</name>
+        <pose>-15 -15 0 0 0 0</pose> <!-- Optional: adjust if needed -->
+      </include>
+
+      <include>
+        <uri>model://grasspatch</uri>
+        <name>Grass10</name>
+        <pose>0 -15 0 0 0 0</pose> <!-- Optional: adjust if needed -->
+      </include>
+
+      <include>
+        <uri> model://Oak tree </uri>
+          <name>Tree1</name>
+            <pose>2 4 0 0 0 0</pose> 
+      </include>
+
+      <include>
+        <uri> model://Oak tree </uri>
+          <name>Tree2</name>
+            <pose>-5 -3 0 0 0 0</pose> 
+      </include>
+
+      <include>
+        <uri> model://Oak tree</uri>
+          <name>Tree3</name>
+            <pose>-1 0 0 0 0 0</pose> 
+      </include>
+
+      <include>
+        <uri> model://Oak tree</uri>
+          <name>Tree4</name>
+            <pose>-2 -6 0 0 0 0</pose> 
+      </include>
+
+      <include>
+        <uri> model://PatientWheelChair</uri>
+          <name>Wheelchair</name>
+            <pose>-5 7 0 0 0 0</pose> 
+      </include>
+
+      <include>
+        <uri> model://falling_rock1</uri>
+          <name>rock</name>
+            <pose>2 -3 0.5 0 0 0</pose> 
+      </include>
+
+      <include>
+        <uri> model://falling_rock1</uri>
+          <name>rock2</name>
+            <pose>-6 -6 0.5 0 0 0</pose> 
+      </include>
+
+      <include>
+        <uri> model://construction_cone</uri>
+          <name>cone1</name>
+            <pose>-3 4 0 0 0 0</pose> 
+      </include>
+
+      <include>
+        <uri> model://construction_cone</uri>
+          <name>cone2</name>
+            <pose>1.5 2 0 0 0 0</pose> 
+      </include>
+
+      <include>
+          <uri> model://number1</uri>
+            <name>one</name>
+              <pose>-6 5 0.5 0 0 0</pose> 
+        </include>
+
+        <include>
+        <uri> model://number2</uri>
+          <name>two</name>
+            <pose>3 -2 0.5 0 0 0</pose> 
+      </include>
+
+      <include>
+        <uri> model://number3</uri>
+          <name>three</name>
+            <pose>-2 -1 0.5 0 0 0</pose> 
+      </include>
+
+
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_north_1</name>
+      <pose>-8.5 10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_north_2</name>
+      <pose>-5.5 10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_north_3</name>
+      <pose>-2.5 10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_north_4</name>
+      <pose>0.5 10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_north_5</name>
+      <pose>3.5 10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_north_6</name>
+      <pose>6.5 10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_north_7</name>
+      <pose>9.5 10 0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_east_1</name>
+      <pose>10 -8.5 0 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_east_2</name>
+      <pose>10 -5.5 0 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_east_3</name>
+      <pose>10 -2.5 0 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_east_4</name>
+      <pose>10 0.5 0 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_east_5</name>
+      <pose>10 3.5 0 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_east_6</name>
+      <pose>10 6.5 0 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_east_7</name>
+      <pose>10 9.5 0 0 0 -1.5708</pose>
+    </include>
+
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_south_1</name>
+      <pose>-8.5 -10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_south_2</name>
+      <pose>-5.5 -10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_south_3</name>
+      <pose>-2.5 -10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_south_4</name>
+      <pose>0.5 -10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_south_5</name>
+      <pose>3.5 -10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_south_6</name>
+      <pose>6.5 -10 0 0 0 0</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_south_7</name>
+      <pose>9.5 -10 0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_west_1</name>
+      <pose>-10 -8.5 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_west_2</name>
+      <pose>-10 -5.5 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_west_3</name>
+      <pose>-10 -2.5 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_west_4</name>
+      <pose>-10 0.5 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_west_5</name>
+      <pose>-10 3.5 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_west_6</name>
+      <pose>-10 6.5 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://brick_box_3x1x3</uri>
+      <name>wall_west_7</name>
+      <pose>-10 9.5 0 0 0 1.5708</pose>
+    </include>
+    
+  </world>
+</sdf>

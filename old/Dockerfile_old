@@ -1,0 +1,67 @@
+# xhost +
+# docker build -t gazebo:dev . 
+# gz sim /workspaces/gazebo_ws/src/p3at_description/world/test1.sdf
+# export GZ_SIM_RESOURCE_PATH=/workspaces/gazebo_ws/models
+
+
+
+FROM ros:jazzy-ros-base AS base
+
+SHELL ["/bin/bash", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ENV DISPLAY=:1
+
+RUN apt-get update && \
+  apt-get install -y curl ros-jazzy-rviz2
+
+RUN curl https://packages.osrfoundation.org/gazebo.gpg --output /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list > /dev/null
+
+RUN apt-get update && \
+  apt-get install -y gz-harmonic && \
+  rm -rf /var/lib/apt/lists/*
+
+#===========================================================
+FROM base AS dev
+# Install your package here 
+RUN apt-get update && \
+  apt-get -y install ros-jazzy-xacro ros-jazzy-ros-gz-bridge \
+  ros-jazzy-joint-state-publisher ros-jazzy-ros-gz-sim \
+  ros-jazzy-slam-toolbox \
+  ros-jazzy-tf2-ros \
+  vim \
+  xpdf \
+  libusb-1.0-0-dev \
+  python3-pip \
+  ros-jazzy-tf-transformations \
+  ros-jazzy-rqt-robot-steering \
+  ros-jazzy-navigation2 \
+  ros-jazzy-nav2-bringup \
+  ros-jazzy-tf2-geometry-msgs \
+  doxygen
+
+RUN git clone https://github.com/reedhedges/AriaCoda.git /workspace/src/AriaCoda \
+     && cd /workspace/src/AriaCoda \
+     && make \
+     && make install 
+
+RUN pip install --break-system-packages phidget22
+RUN pip install --break-system-packages numpy
+RUN pip install --break-system-packages scikit-learn
+
+RUN sudo apt update && sudo apt install -y ros-jazzy-pcl-conversions
+
+ENV WS=gazebo_ws
+ENV WORKSPACE=/workspaces/${WS}
+WORKDIR /workspaces
+
+COPY --chown=root:root --chmod=700 . /workspaces/gazebo_ws
+COPY --chown=root:root ros_entrypoint.sh /ros_entrypoint.sh
+RUN chmod +x /ros_entrypoint.sh
+ENTRYPOINT ["/ros_entrypoint.sh"]
+
+WORKDIR ${WORKSPACE}
+RUN cat .bashconfig >> ~/.bashrc
+RUN ./build.sh

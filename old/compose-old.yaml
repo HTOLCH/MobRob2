@@ -1,0 +1,37 @@
+services:
+  ignition:
+    image: gazebo:dev
+    privileged: true
+    container_name: gazebo_container
+    network_mode: host
+    devices:
+      - "/dev/bus/usb:/dev/bus/usb"  
+      - "/dev/input/js0"  # Joystick device for controller (Ensure it's correct path)
+      - "/dev/ttyUSB0"  # Serial device for communication with ariaNode (Ensure correct path)
+      - "/dev/ttyACM0"  # For GPS
+    device_cgroup_rules:
+      - 'c 189:* rmw'
+    volumes:
+      - ./src:/workspaces/gazebo_ws/src:rw
+      #- workspace:/workspaces/gazebo_ws
+      - type: bind
+        source: /dev/shm
+        target: /dev/shm
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - XAUTHORITY
+      - DISPLAY=:1
+      - QT_X11_NO_MITSHM=1
+      - GZ_SIM_RESOURCE_PATH=/workspaces/gazebo_ws/models
+      #- ROS_DOMAIN_ID: 69
+
+    #command: tail -f /dev/null
+    command: ros2 launch p3at_description display.launch.py
+    # command: ros2 launch p3at_description display.launch.py #slam_params_file:=/workspaces/gazebo_ws/src/p3at_description/config/mapper_params_online_async.yaml
+    #command: bash -c "cd /workspaces/gazebo_ws && ./build.sh && source install/setup.bash && ros2 launch p3at_description display.launch.py"
+    #command: bash -c "tail -f /dev/null"
+    # tty: true
+    # stdin_open: true
+    
+# volumes:
+  # - /path/on/host/gazebo_models:/workspaces/gazebo_ws/models

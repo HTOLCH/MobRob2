@@ -1,0 +1,31 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="Number2">
+    <pose>0 0 0.4 0 0 0</pose>
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://number1/meshes/number.dae</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1.0 1.0 1.0</diffuse>
+          <specular>1.0 1.0 1.0</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://number2/materials/textures/number2.png</albedo_map>
+            </metal>
+          </pbr>
+          <!-- fallback to script if no PBR support-->
+          <script>
+            <uri>model://number2/materials/scripts</uri>
+            <uri>model://number2/materials/textures</uri>
+            <name>Number/Two</name>
+          </script>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

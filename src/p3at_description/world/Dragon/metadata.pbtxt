@@ -1,0 +1,35 @@
+model {
+  file: "model.sdf"
+}
+name: "Animal_Planet_Foam_2Headed_Dragon"
+description: "Animal Planet Foam 2-Headed Dragon"
+version: 1
+authors {
+  name: "Google"
+  email: "scanned-objects@google.com"
+}
+legal {
+  copyright: "Copyright 2020 Google LLC."
+  license: "Creative Commons Attribution 4.0 International"
+}
+annotations {
+  key: "brand"
+  value: "Animal Planet"
+}
+annotations {
+  key: "gtin"
+  value: "00803516005916"
+}
+annotations {
+  key: "sku"
+  value: "803516005916"
+}
+compatibilities {
+  name: "Gazebo"
+  version {
+    major: 11
+  }
+}
+categories {
+  first: "Toys"
+}

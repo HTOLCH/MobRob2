@@ -1,0 +1,70 @@
+  # copy this format
+  # maybe need a config file -> use command
+  # e.g deadman switch
+
+  # docker compose up
+
+  # node_name:
+  #   image: mobrobproject:v1 # These variables come from a .env file in the same directory
+  #   container_name: node
+  #   network_mode: host # search up... most of the time will use host -> uses network to find other nodes
+  #   #devices: [ "dev/ttyUSB0:/dev/ttyUSB0" ] # dev/input/js0
+  #   build:
+  #     context: 
+  #     ssh: [ "default=$HOME/.ssh/id_rsa" ]
+  #     target: staging #pull from the current folder
+  #     tty: True # passing through terminal 
+  #     stdin_open: True
+  #     command: ros2 launch master lowlevel.launch.py params_file:=/lowlevel_config
+  #     configs:
+  #     - lowlevel_config
+  #   volumes:
+#       - ./config:/workspace/src/controller/config -> volume if changine a lot.. in docker when permanent.
+  #     - type: bind
+  #       source: /dev/shm
+  #       target: /dev/shm
+  #     - type: bind # take host device directory and connect to device directory of container
+  #       source: /dev
+  #       target: /dev
+  #   device_cgroup_rules: #special considereations for devices (permissions)
+  #   - 'c 188:* rmw'
+  #   - 'c 189:* rmw'
+
+  # source /opt/ros/jazzy/setup.bash # whenever you open a new shell -> use a lot of shells while testing
+  # ros2 run controller controller_node # start controller node 
+  # ros2 topic echo /joy # print any messages  s
+services:
+  test:
+    image: part2  # Image name for the drive service
+    build:
+      context: .  # Build in current directory
+      dockerfile: Dockerfile
+      # target: staging  # Optional, only if you have multi-stage builds
+    environment:
+      - ROS_DOMAIN_ID=7
+      - DISPLAY=:1
+    tty: true  # Open a terminal session for the container
+    stdin_open: true  # Keep stdin open for interactive commands
+    container_name: part2  # Container name for easier identification
+    network_mode: host  # Use host network mode
+    devices:
+      - "/dev/bus/usb:/dev/bus/usb"  
+      - "/dev/input/js0"  # Joystick device for controller (Ensure it's correct path)
+      - "/dev/ttyUSB0"  # Serial device for communication with ariaNode (Ensure correct path)
+      - "/dev/ttyACM0"  # For GPS
+    device_cgroup_rules:
+      - 'c 189:* rmw'
+    volumes:
+      - type: bind  # Mount /dev/shm directory from host to container
+        source: /dev/shm  # Ensure this directory exists on the host
+        target: /dev/shm
+      - type: bind  # Mount /dev directory from host to container
+        source: /dev  # Ensure this directory exists on the host
+        target: /dev
+      - type: bind  # Mount workspace directory from host to container
+        source: .  # Correct the path to your workspace directory on the host
+        target: /workspace  # Mount to /workspace in the container
+      - "/tmp/.X11-unix:/tmp/.X11-unix"
+    #command: "source /opt/ros/jazzy/setup.bash"
+    
+    
