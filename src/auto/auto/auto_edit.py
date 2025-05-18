@@ -4,7 +4,7 @@ from geometry_msgs.msg import PoseStamped, Twist
 from visualization_msgs.msg import Marker
 from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
-from tf_transformations import quaternion_from_euler
+from tf_transformations import quaternion_from_euler, euler_from_quaternion
 from math import radians
 import time
 from std_msgs.msg import String
@@ -94,7 +94,7 @@ class AutoNavigator(Node):
         self.received_auto_status = False
 
         self.latest_odom = None
-        self.create_subscription(Odometry, "/odom2", self.odom_callback, 10)
+        self.create_subscription(Odometry, "/odom", self.odom_callback, 10)
 
         self.explore_index = 0  # Start at the first goal
         self.goal_list = []     # Store the full goal list here
@@ -315,41 +315,28 @@ class AutoNavigator(Node):
             
             self.get_logger().info(f"Diff x: {diff_x}")
 
-            if (abs(diff_x) < 1000):
-                self.current_twist.angular.z = float(min(max(-abs(diff_x)/3000,-0.1),-0.05))
-            
-
-            if (abs(diff_x) < center_tolerance):
-                #The waypoint heading needs to be set as the current heading
+            if (abs(diff_x) > center_tolerance):
+                self.current_twist.angular.z = float(min(max(diff_x/3000,-0.1),-0.05))
+            else:
                 self.get_logger().info(f"Facing Object")
                 self.object_heading = math.radians(self.heading)
 
                 #Stop turning.
                 self.current_twist.angular.z = float(0.0)
 
-                self.aligned = True
+                aligned = True
 
             self.twist_pub.publish(self.current_twist)
 
-        # Use Lidar to get distance ahead
-        target_distance = self.min_forward
-        self.get_logger().info(f"Distance to object: {target_distance}")
-
-        # Move to 1m away using Nav2
-        #Using nav stack:
-        # if target_distance > 1:
-        #     odom_msg = self.latest_odom  # From odometry callback
-        #     pose = odom_msg.pose.pose
-        #     forward_x = pose.position.x + target_distance * math.cos(self.current_yaw)
-        #     forward_y = pose.position.y + target_distance * math.sin(self.current_yaw)
-        #     self.send_goal(forward_x, forward_y, math.degrees(self.current_yaw))
+        self.get_logger().info(f"Distance to object: {self.min_forward}")
 
         #Just running wheels (ez mode)
-        while target_distance > 3:
+        while self.min_forward > 3:
             #Spin rclpy to update distance.
             rclpy.spin_once(self, timeout_sec=0.05)
 
-            self.get_logger().info(f"Distance to object: {target_distance}")
+
+            self.get_logger().info(f"Distance to object: {self.min_forward}")
 
             #Move forward
             self.current_twist.linear.x = float(0.3)
@@ -367,46 +354,36 @@ class AutoNavigator(Node):
         self.take_photo()
 
         #Record object location
-        self.get_logger().info(f"Recording object position")   
+        self.get_logger().info(f"Appending current location to list and publishing marker")   
 
-        # 1. Create PoseStamped in odom frame (robot's current pose)
-        odom_msg = self.latest_odom  # From odometry callback
-
-        pose_in_odom = PoseStamped()
-        pose_in_odom.header.stamp = self.get_clock().now().to_msg()
-        pose_in_odom.header.frame_id = "odom"
-        pose_in_odom.pose = odom_msg.pose.pose
-
-        # 2. Transform to map frame
+        #Get the current map-base_frame transform for x and y robot coordinates
         try:
-            pose_in_map = self.tf_buffer.transform(
-                pose_in_odom,
+            now = rclpy.time.Time()
+            transform = self.tf_buffer.lookup_transform(
                 "map",
-                timeout=rclpy.duration.Duration(seconds=1.0)
+                "base_link",  # Source frame
+                now,
+                timeout=rclpy.duration.Duration(seconds=5.0)
             )
 
-            # 3. Publish marker using pose_in_map
-            marker = Marker()
-            marker.header.frame_id = "map"
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.type = Marker.SPHERE
-            marker.action = Marker.ADD
-            marker.pose = pose_in_map.pose
-            marker.scale.x = marker.scale.y = marker.scale.z = 0.2
-            marker.color.r = 1.0
-            marker.color.g = 0.0
-            marker.color.b = 0.0
-            marker.color.a = 1.0
-            marker.id = int(time.time())
-            self.marker_pub.publish(marker)
+            # Extract translation
+            x = transform.transform.translation.x
+            y = transform.transform.translation.y
+            z = transform.transform.translation.z  # optional
 
-            self.get_logger().info("Object position recorded in map frame")
+            # Extract yaw from quaternion
+            q = transform.transform.rotation
+            quaternion = [q.x, q.y, q.z, q.w]
+            (_, _, yaw) = euler_from_quaternion(quaternion)
+
+            # Use x, y (and yaw if needed)
+            self.publish_goal_marker(x, y, int(time.time()), delete=False)
+            self.object_list.append((self.bb_item, x, y))
+
+            self.get_logger().info("Recorded map-frame position using TF")
 
         except TransformException as e:
             self.get_logger().error(f"Transform error: {str(e)}")
-
-        #Add item to the list of already scanned items:
-        self.object_list.append(self.bb_item)
 
         # Resume normal path
         self.bounding_box_detected = False
@@ -464,6 +441,7 @@ class AutoNavigator(Node):
 
                     if self.bounding_box_detected:
                         self.get_logger().info("Goal paused due to bounding box detection.")
+                        self.publish_goal_marker(x, y, self.explore_index, delete=True)
                         goal_handle.cancel_goal_async()
                         self.handle_bounding_box()
 
@@ -471,6 +449,7 @@ class AutoNavigator(Node):
                         future = self.send_goal(x, y, theta)
                         rclpy.spin_until_future_complete(self, future)
                         goal_handle = future.result()
+                        self.publish_goal_marker(x, y, self.explore_index, delete=False)
 
                         if not goal_handle.accepted:
                             self.get_logger().warn("Resent goal was rejected")

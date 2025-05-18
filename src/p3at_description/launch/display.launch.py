@@ -137,6 +137,12 @@ def generate_launch_description():
     phidget_drivers = IncludeLaunchDescription(
             PythonLaunchDescriptionSource('/workspace/src/p3at_description/launch/spatial.launch.py')
         )
+    
+    aria_node = Node(
+        package='ariaNode',
+        executable='ariaNode',
+        arguments=['-rp', '/dev/ttyUSB0']
+    )
 
     #Manual setup that works (kinda)
     #ros2 launch nav2_bringup navigation_launch.py params_file:=./src/p3at_description/config/nav2_params.yaml use_sim_time:=true
@@ -200,6 +206,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         #log_slam_param,
+        #depth_camera,
+        aria_node,
         phidget_drivers,
         joystick_library,
         master,
