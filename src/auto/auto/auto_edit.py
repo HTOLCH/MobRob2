@@ -23,6 +23,7 @@ from geometry_msgs.msg import Point
 import std_msgs.msg
 from std_msgs.msg import Bool
 from geometry_msgs.msg import Quaternion
+import ast
 
 
 class AutoNavigator(Node):
@@ -57,6 +58,19 @@ class AutoNavigator(Node):
 
         #List that stores the already scanned items/objects 
         self.object_list= []
+
+        #List for testing
+        self.object_list=[
+            ("1", 1, 1),
+            ("2", 2, 2),
+            ("3", 3, 3),
+            ("4", 4, 4),
+            ("5", 5, 5),
+            ("6", 6, 6),
+            ("7", 7, 7),
+            ("r", 8, 8),
+            ("y", 9, 9)
+        ]
 
         self.completed_exploration = False
 
@@ -480,91 +494,47 @@ class AutoNavigator(Node):
 
                 self.explore_index += 1  # Only advance if we attempted the goal
 
+        #Exploration complete, drive to points of interest in desired order.
+        self.drive_to_points(self)
 
 
-    def explore_old(self):
-        if not self.activated:
-            self.get_logger().info("Exploration not activated.")
+    def drive_to_points(self):
+        self.get_logger().info("Driving to points")
+
+        if not self.object_list:
+            self.get_logger().warn("No objects available to drive to.")
             return
 
-        # Define a list of goals to explore
-        #Grid bounds
-        x_min, x_max = -6, 6
-        y_min, y_max = -6, 6
-        step = 1  # Go every 3 units
-        
-        goal_list = self.lawnmower1(x_min,x_max,0,y_max,step)
+        while True:
+            points_str = input("Enter object identifiers (e.g. 0,2,'y'): ")
+            try:
+                points_list = ast.literal_eval(f"[{points_str}]")
+                selected_coords = []
 
-        goal_list2 = self.lawnmower2(x_min,x_max,y_min,y_max,step)
+                for item in points_list:
+                    if isinstance(item, int):
+                        if 0 <= item < len(self.object_list):
+                            obj = self.object_list[item]
+                            selected_coords.append((str(item), obj[1], obj[2]))  # use index as label
+                        else:
+                            raise ValueError(f"Index {item} out of range.")
+                    elif isinstance(item, str):
+                        matches = [(obj[0], obj[1], obj[2]) for obj in self.object_list if obj[0] == item]
+                        if matches:
+                            selected_coords.extend(matches)
+                        else:
+                            raise ValueError(f"No object found with name '{item}'")
+                    else:
+                        raise ValueError(f"Unsupported input type: {item}")
+                break
+            except Exception as e:
+                self.get_logger().error(f"Invalid input: {e}")
+                print("Please try again.\n")
 
-        goal_list3 = self.lawnmower3(x_min,x_max,y_min,0,step)
+        for label, x, y in selected_coords:
+            self.get_logger().info(f"Driving to object {label} at coordinates x={x}, y={y}")
+            # Call navigation logic here
 
-        goal_list = goal_list + goal_list2 + goal_list3
-
-        self.get_logger().info(f"Goals: {goal_list}")
-
-        for idx, (x, y, theta) in enumerate(goal_list):
-            self.get_logger().info(f"Navigating to goal #{idx + 1}")
-            self.publish_goal_marker(x, y, idx, delete=False)
-
-            future = self.send_goal(x, y, theta)
-            #rclpy.spin_until_future_complete(self, future)
-            goal_handle = future.result()
-
-            if not goal_handle.accepted:
-                self.get_logger().warn(f"Goal #{idx + 1} rejected")
-                continue
-
-            self.get_logger().info(f"Goal #{idx + 1} accepted")
-
-            result_future = goal_handle.get_result_async()
-
-            # Wait up to 15 seconds for result
-            start_time = time.time()
-            while rclpy.ok() and not result_future.done():
-                rclpy.spin_once(self, timeout_sec=0.1)
-
-                if not self.activated:
-                    self.get_logger().info("Exploration deactivated during goal. Cancelling goal.")
-                    goal_handle.cancel_goal_async()
-                    return
-
-                if self.bounding_box_detected:
-                    self.get_logger().info("Goal paused due to bounding box detection.")
-                    goal_handle.cancel_goal_async()
-                    self.handle_bounding_box()
-
-                    # Re-issue the same goal after handling
-                    self.get_logger().info("Resending the same goal after bounding box handled...")
-
-                    future = self.send_goal(x, y, theta)
-                    rclpy.spin_until_future_complete(self, future)
-                    goal_handle = future.result()
-
-                    if not goal_handle.accepted:
-                        self.get_logger().warn("Resent goal was rejected")
-                        break
-
-                    result_future = goal_handle.get_result_async()
-                    start_time = time.time()  # Reset timer after resending
-                    continue  # Stay in the while loop
-
-
-                if time.time() - start_time > 45.0:
-                    self.get_logger().warn(f"Goal #{idx + 1} timed out after 30s. Skipping...")
-                    goal_handle.cancel_goal_async()
-                    break
-
-            if result_future.done():
-                result = result_future.result().result
-                if result.error_code == 0:
-                    self.get_logger().info(f"Goal #{idx + 1} succeeded")
-                    self.publish_goal_marker(x, y, idx, delete=True)
-                else:
-                    self.get_logger().warn(f"Goal #{idx + 1} failed - Error code: {result.error_code}, Message: {result.error_msg}")
-            else:
-                self.get_logger().info(f'Goal #{idx + 1} was not completed in time.')
-                self.publish_goal_marker(x, y, idx, delete=True)
 
 
     def take_photo(self):
@@ -586,7 +556,8 @@ class AutoNavigator(Node):
 def main():
     rclpy.init()
     node = AutoNavigator()
-    node.explore()
+    #node.explore()
+    node.drive_to_points()
     node.destroy_node()
     rclpy.shutdown()
 
