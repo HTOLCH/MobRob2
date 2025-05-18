@@ -130,7 +130,7 @@ class AutoNavigator(Node):
         
         #640 samples in sim,
         #1440 samples on richbeam lidar
-        lidar_samples = 640
+        lidar_samples = 1440
 
         lower_right = int(lidar_samples/4.5)
         upper_right = int(lidar_samples/2.4)
@@ -393,7 +393,7 @@ class AutoNavigator(Node):
         #Grid bounds
         x_min, x_max = -6, 6
         y_min, y_max = -6, 6
-        step = 3  # Go every 3 units
+        step = 1  # Go every 3 units
         
         goal_list = self.lawnmower1(x_min,x_max,0,y_max,step)
 

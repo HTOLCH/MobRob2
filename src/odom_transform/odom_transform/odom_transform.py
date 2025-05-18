@@ -14,7 +14,7 @@ class TransformBroadcaster(Node):
     def __init__(self):
         super().__init__('transform_broadcaster')
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
-        self.odom2_publisher = self.create_publisher(Odometry, 'odom2', 10)
+        self.odom2_publisher = self.create_publisher(Odometry, 'odom', 10)
 
         # Subscribe to odometry for linear odom (from simulated wheel ticks)
         # self.subscription = self.create_subscription(
@@ -79,8 +79,8 @@ class TransformBroadcaster(Node):
         self.prev_y = y
 
         #YAYY THIS WORKING HEHEEH (avert ur eyes Kieran)
-        self.y = x
-        self.x = -y
+        self.y = y
+        self.x = x
 
     def phidget_callback(self,msg):
         self.yaw = -msg.data

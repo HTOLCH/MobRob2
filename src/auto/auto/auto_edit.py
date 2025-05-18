@@ -512,7 +512,7 @@ class AutoNavigator(Node):
         #Grid bounds
         x_min, x_max = -6, 6
         y_min, y_max = -6, 6
-        step = 3  # Go every 3 units
+        step = 1  # Go every 3 units
         
         goal_list = self.lawnmower1(x_min,x_max,0,y_max,step)
 

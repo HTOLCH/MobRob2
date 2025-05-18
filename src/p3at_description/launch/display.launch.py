@@ -59,7 +59,7 @@ def generate_launch_description():
             package='master',
             executable='master',
             name='master')  
-    
+
     declare_slam_params = DeclareLaunchArgument(
             'slam_params_file',
             default_value=PathJoinSubstitution([
@@ -91,15 +91,29 @@ def generate_launch_description():
 
 
     # Include the SLAM Toolbox launch file
+    # slam_launch = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource([
+    #         PathJoinSubstitution([
+    #             FindPackageShare('slam_toolbox'), 'launch', 'online_async_launch.py'
+    #         ])
+    #     ]),
+    #     launch_arguments={
+    #         'slam_params_file': './src/p3at_description/config/mapper_params_online_async.yaml',
+    #         'use_sim_time': LaunchConfiguration('use_sim_time'),
+    #         'log_level': 'error',
+    #     }.items()
+    # )
+
     slam_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
-                FindPackageShare('slam_toolbox'), 'launch', 'online_async_launch.py'
+                FindPackageShare('p3at_description'), 'launch', 'online_async_launch.py'
             ])
         ]),
         launch_arguments={
             'slam_params_file': './src/p3at_description/config/mapper_params_online_async.yaml',
             'use_sim_time': LaunchConfiguration('use_sim_time'),
+            'log_level': 'error',
         }.items()
     )
 
