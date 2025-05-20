@@ -1,0 +1,6 @@
+# TakePhoto.srv
+# This service doesn't take any arguments, just a trigger to take the photo
+---
+# Response will confirm the photo was taken (you can customize this as needed)
+bool success
+string message

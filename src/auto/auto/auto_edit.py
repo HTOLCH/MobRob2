@@ -26,7 +26,8 @@ from geometry_msgs.msg import Quaternion
 import ast
 from nav2_simple_commander.robot_navigator import BasicNavigator
 import itertools
-
+from nav_msgs.msg import Path
+from std_msgs.msg import Header
 
 class AutoNavigator(Node):
     def __init__(self):
@@ -39,7 +40,7 @@ class AutoNavigator(Node):
         self.distances_publisher = self.create_publisher(String, 'distances', 10)
         self.twist_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.marker_pub = self.create_publisher(Marker, '/visualization_marker', 10)
-
+        self.path_pub = self.create_publisher(Path, '/plan', 10)        
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
@@ -64,14 +65,14 @@ class AutoNavigator(Node):
         #List for testing
         self.object_list=[
             ("1", 1, 1, 0),
-            ("2", 2, 2, 0),
+            ("2", -2, 2, 0),
             ("3", 3, 3, 0),
-            ("4", 4, 4, 0),
+            ("4", 4, -4, 0),
             ("5", 5, 5, 0),
             ("6", 6, 6, 0),
-            ("7", 7, 7, 0),
-            ("r", 8, 8, 0),
-            ("y", 9, 9, 0)
+            ("7", -7, 7, 0),
+            ("r", -2, -2, 0),
+            ("y", -5, -2, 0)
         ]
 
         self.completed_exploration = False
@@ -79,7 +80,7 @@ class AutoNavigator(Node):
         #Bounding box subscription
         self.subscription = self.create_subscription(
             String,  # Replace with the actual bounding box message type
-            'bounding_box',
+            'bounding_boxes_object',
             self.bounding_box_callback,
             10)
         
@@ -119,6 +120,8 @@ class AutoNavigator(Node):
         #self.navigator.waitUntilNav2Active()
 
         self.get_logger().info("auto node up")
+
+        self.min_forward = 0
 
 
         #self.timer = self.create_timer(0.5, self.explore)
@@ -166,12 +169,19 @@ class AutoNavigator(Node):
         marker.scale.z = 0.3
 
         marker.color.a = 1.0  # Alpha
-        marker.color.r = 0.0
-        marker.color.g = 1.0
+        marker.color.r = r
+        marker.color.g = g
         marker.color.b = 0.0
 
         self.marker_pub.publish(marker)
 
+    def clear_path(self):
+        empty_path = Path()
+        empty_path.header = Header()
+        empty_path.header.stamp = self.get_clock().now().to_msg()
+        empty_path.header.frame_id = "map"  # Use correct frame
+
+        self.path_pub.publish(empty_path)
 
     def scan_callback(self, msg):
 
@@ -234,20 +244,39 @@ class AutoNavigator(Node):
 
 
     def bounding_box_callback(self, msg):
-        self.get_logger().info("Bounding box detected. Interrupting current path.")
+        #self.get_logger().info("Bounding box detected. Interrupting current path.")
         
-        #Bounding boxes will be published as a list: [x1,x2,y1,y2,item]
-        data = list(msg.data)
+        #Bounding boxes will be published as a list: "[x1,y1,x2,y2,item]"
+        # data = ast.literal_eval(msg.data)
+        # #self.get_logger().info(str(data))
 
-        self.bb_x1 = data[0]
-        self.bb_x2 = data[1]
-        self.bb_y1 = data[2]
-        self.bb_y2 = data[3]
-        self.bb_item = data[4]
+        # self.bb_x1 = int(data[0])
+        # self.bb_y1 = int(data[1])
+        # self.bb_x2 = int(data[2])
+        # self.bb_y2 = int(data[3])
+        # self.bb_item = data[4]
 
         #Only set true if the number/ object detected has not already been stored:
-        if self.bb_item in self.object_list:
-            self.get_logger().info("Detected object has already been stored, ignoring.")         
+        try:
+            data = ast.literal_eval(msg.data)
+            if not isinstance(data, list) or len(data) < 5:
+                #raise ValueError("Bounding box does not have expected format")
+                # Now you can safely use `data` as a list
+                self.bb_x1 = int(data[0])
+                self.bb_y1 = int(data[1])
+                self.bb_x2 = int(data[2])
+                self.bb_y2 = int(data[3])
+                self.bb_item = data[4]
+        except (SyntaxError, ValueError) as e:
+            #self.get_logger().warn(f"Failed to parse bounding box data: {msg.data}. Error: {e}")
+            return
+
+        if any(obj[0] == self.bb_item for obj in self.object_list):
+            x=1
+            #print("hi")
+            self.get_logger().info("Detected object has already been stored, ignoring.")    
+        elif self.bb_item == None:
+            x=1
         else:
             self.get_logger().info("Detected object has not been stored, pausing mapping...")
             self.bounding_box_detected = True
@@ -358,7 +387,7 @@ class AutoNavigator(Node):
         self.get_logger().info(f"Distance to object: {self.min_forward}")
 
         #Just running wheels (ez mode)
-        while self.min_forward > 3:
+        while float(self.min_forward) > 3:
             #Spin rclpy to update distance.
             rclpy.spin_once(self, timeout_sec=0.05)
 
@@ -471,6 +500,7 @@ class AutoNavigator(Node):
                         self.get_logger().info("Goal paused due to bounding box detection.")
                         self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
                         goal_handle.cancel_goal_async()
+                        self.clear_path()
                         self.handle_bounding_box()
 
                         self.get_logger().info("Resending the same goal...")
@@ -490,26 +520,30 @@ class AutoNavigator(Node):
                     if time.time() - start_time > 45.0:
                         self.get_logger().warn(f"Goal #{self.explore_index + 1} timed out.")
                         goal_handle.cancel_goal_async()
+                        self.clear_path()
                         break
 
                 if result_future.done():
                     result = result_future.result().result
                     if result.error_code == 0:
                         self.get_logger().info(f"Goal #{self.explore_index + 1} succeeded")
+                        self.clear_path()
                         self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
                     else:
                         self.get_logger().warn(
                             f"Goal #{self.explore_index + 1} failed - Code: {result.error_code}"
                         )
+                        self.clear_path()
                         self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
                 else:
                     self.get_logger().info(f"Goal #{self.explore_index + 1} not completed.")
+                    self.clear_path()
                     self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
 
                 self.explore_index += 1  # Only advance if we attempted the goal
 
             #Check to see if we have completed exploration
-            if self.explore_index > len(self.goal_list):
+            if self.explore_index == (len(self.goal_list) - 1):
                 self.completed_exploration = True
                 self.get_logger().info("Exploration complete, driving to detected numbers...")
 
@@ -574,6 +608,9 @@ class AutoNavigator(Node):
 
             while route_index < len(fastest_path) and self.activated:
                     x, y, theta = fastest_path[route_index]
+                    x = float(x)
+                    y = float(y)
+                    theta = float(theta)
                     self.get_logger().info(f"Driving to object {route_index} at coordinates x={x}, y={y}, phi={theta}")
                     self.publish_goal_marker(x, y, route_index, "g", delete=False)
 
@@ -603,6 +640,7 @@ class AutoNavigator(Node):
                         if time.time() - start_time > 50.0:
                             self.get_logger().warn(f"Goal #{route_index} timed out.")
                             goal_handle.cancel_goal_async()
+                            self.clear_path()
                             break
 
                     if result_future.done():
@@ -614,9 +652,11 @@ class AutoNavigator(Node):
                             self.get_logger().warn(
                                 f"Goal #{route_index} failed - Code: {result.error_code}"
                             )
+                            self.clear_path()
                             self.publish_goal_marker(x, y, route_index, "g", delete=True)
                     else:
                         self.get_logger().info(f"Goal #{route_index} not completed.")
+                        self.clear_path()
                         self.publish_goal_marker(x, y, route_index, "g", delete=True)
 
             #Check to see if we have completed exploration
@@ -678,8 +718,8 @@ class AutoNavigator(Node):
 def main():
     rclpy.init()
     node = AutoNavigator()
-    #node.explore()
-    node.drive_to_points()
+    node.explore()
+    #node.drive_to_points()
     node.destroy_node()
     rclpy.shutdown()
 
