@@ -24,6 +24,8 @@ import std_msgs.msg
 from std_msgs.msg import Bool
 from geometry_msgs.msg import Quaternion
 import ast
+from nav2_simple_commander.robot_navigator import BasicNavigator
+import itertools
 
 
 class AutoNavigator(Node):
@@ -61,15 +63,15 @@ class AutoNavigator(Node):
 
         #List for testing
         self.object_list=[
-            ("1", 1, 1),
-            ("2", 2, 2),
-            ("3", 3, 3),
-            ("4", 4, 4),
-            ("5", 5, 5),
-            ("6", 6, 6),
-            ("7", 7, 7),
-            ("r", 8, 8),
-            ("y", 9, 9)
+            ("1", 1, 1, 0),
+            ("2", 2, 2, 0),
+            ("3", 3, 3, 0),
+            ("4", 4, 4, 0),
+            ("5", 5, 5, 0),
+            ("6", 6, 6, 0),
+            ("7", 7, 7, 0),
+            ("r", 8, 8, 0),
+            ("y", 9, 9, 0)
         ]
 
         self.completed_exploration = False
@@ -113,6 +115,9 @@ class AutoNavigator(Node):
         self.explore_index = 0  # Start at the first goal
         self.goal_list = []     # Store the full goal list here
 
+        #self.navigator = BasicNavigator()
+        #self.navigator.waitUntilNav2Active()
+
         self.get_logger().info("auto node up")
 
 
@@ -134,7 +139,15 @@ class AutoNavigator(Node):
     def phidget_callback(self,msg):
         self.heading = msg.data
 
-    def publish_goal_marker(self, x, y, idx, delete=False):
+    def publish_goal_marker(self, x, y, idx, colour, delete=False):
+
+        if colour == "g":
+            g = 1.0
+            r = 0.0
+        else:
+            g = 0.0
+            r = 1.0
+
         marker = Marker()
         marker.header.frame_id = "map"
         marker.header.stamp = self.get_clock().now().to_msg()
@@ -391,8 +404,8 @@ class AutoNavigator(Node):
             (_, _, yaw) = euler_from_quaternion(quaternion)
 
             # Use x, y (and yaw if needed)
-            self.publish_goal_marker(x, y, int(time.time()), delete=False)
-            self.object_list.append((self.bb_item, x, y))
+            self.publish_goal_marker(x, y, int(time.time()), "r", delete=False)
+            self.object_list.append((self.bb_item, x, y, self.heading))
 
             self.get_logger().info("Recorded map-frame position using TF")
 
@@ -404,6 +417,7 @@ class AutoNavigator(Node):
 
     def explore(self):
         while not self.completed_exploration:
+
             sleep(1)
             #Spin a few times to get correct data
             while self.activated == False:
@@ -429,7 +443,7 @@ class AutoNavigator(Node):
             while self.explore_index < len(self.goal_list) and self.activated:
                 x, y, theta = self.goal_list[self.explore_index]
                 self.get_logger().info(f"Navigating to goal #{self.explore_index + 1}")
-                self.publish_goal_marker(x, y, self.explore_index, delete=False)
+                self.publish_goal_marker(x, y, self.explore_index, "g", delete=False)
 
                 future = self.send_goal(x, y, theta)
                 rclpy.spin_until_future_complete(self, future)
@@ -455,7 +469,7 @@ class AutoNavigator(Node):
 
                     if self.bounding_box_detected:
                         self.get_logger().info("Goal paused due to bounding box detection.")
-                        self.publish_goal_marker(x, y, self.explore_index, delete=True)
+                        self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
                         goal_handle.cancel_goal_async()
                         self.handle_bounding_box()
 
@@ -463,7 +477,7 @@ class AutoNavigator(Node):
                         future = self.send_goal(x, y, theta)
                         rclpy.spin_until_future_complete(self, future)
                         goal_handle = future.result()
-                        self.publish_goal_marker(x, y, self.explore_index, delete=False)
+                        self.publish_goal_marker(x, y, self.explore_index, "g", delete=False)
 
                         if not goal_handle.accepted:
                             self.get_logger().warn("Resent goal was rejected")
@@ -482,60 +496,168 @@ class AutoNavigator(Node):
                     result = result_future.result().result
                     if result.error_code == 0:
                         self.get_logger().info(f"Goal #{self.explore_index + 1} succeeded")
-                        self.publish_goal_marker(x, y, self.explore_index, delete=True)
+                        self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
                     else:
                         self.get_logger().warn(
                             f"Goal #{self.explore_index + 1} failed - Code: {result.error_code}"
                         )
-                        self.publish_goal_marker(x, y, self.explore_index, delete=True)
+                        self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
                 else:
                     self.get_logger().info(f"Goal #{self.explore_index + 1} not completed.")
-                    self.publish_goal_marker(x, y, self.explore_index, delete=True)
+                    self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
 
                 self.explore_index += 1  # Only advance if we attempted the goal
 
-        #Exploration complete, drive to points of interest in desired order.
+            #Check to see if we have completed exploration
+            if self.explore_index > len(self.goal_list):
+                self.completed_exploration = True
+                self.get_logger().info("Exploration complete, driving to detected numbers...")
+
         self.drive_to_points(self)
 
 
     def drive_to_points(self):
         self.get_logger().info("Driving to points")
 
+        drive_targets = []
+        home_position = (0,0,0)
+
         if not self.object_list:
             self.get_logger().warn("No objects available to drive to.")
             return
 
         while True:
-            points_str = input("Enter object identifiers (e.g. 0,2,'y'): ")
+            points_str = input("Enter object indices (e.g. 1,2,5): ")
             try:
-                points_list = ast.literal_eval(f"[{points_str}]")
-                selected_coords = []
+                indices = ast.literal_eval(f"[{points_str}]")
+                if not all(isinstance(i, int) for i in indices):
+                    raise ValueError("All inputs must be integers.")
 
-                for item in points_list:
-                    if isinstance(item, int):
-                        if 0 <= item < len(self.object_list):
-                            obj = self.object_list[item]
-                            selected_coords.append((str(item), obj[1], obj[2]))  # use index as label
-                        else:
-                            raise ValueError(f"Index {item} out of range.")
-                    elif isinstance(item, str):
-                        matches = [(obj[0], obj[1], obj[2]) for obj in self.object_list if obj[0] == item]
-                        if matches:
-                            selected_coords.extend(matches)
-                        else:
-                            raise ValueError(f"No object found with name '{item}'")
+                selected_coords = []
+                for idx in indices:
+                    if 0 <= idx < len(self.object_list):
+                        obj = self.object_list[idx]
+                        selected_coords.append((str(idx), obj[1], obj[2], obj[3]))  # label, x, y, phi
                     else:
-                        raise ValueError(f"Unsupported input type: {item}")
-                break
+                        raise ValueError(f"Index {idx} out of range.")
+
+                break  # Input is valid, exit loop
+
             except Exception as e:
                 self.get_logger().error(f"Invalid input: {e}")
                 print("Please try again.\n")
 
-        for label, x, y in selected_coords:
-            self.get_logger().info(f"Driving to object {label} at coordinates x={x}, y={y}")
-            # Call navigation logic here
+        for label, x, y, phi in selected_coords:
+            self.get_logger().info(f"Driving to object {label} at coordinates x={x}, y={y}, phi={phi}")
+            drive_targets.append((label, x, y, phi))
+        
+        self.get_logger().info(f"targets list: {drive_targets}")
+        #Find the fastest path between all the targets
+        positions = [(x, y, phi) for (_, x, y, phi) in drive_targets]
+        fastest_path = self.find_shortest_path(positions, start=(0,0,0))
+
+        fastest_path.append(home_position)
+
+        self.get_logger().info(f"Fastest path: {fastest_path}")
+
+        self.get_logger().info(f"Navigating path...")
+
+        #Start at 1
+        route_index = 1
+        completed_exploration_waypoint_rerun = False
+
+        while not completed_exploration_waypoint_rerun:
+            sleep(1)
+
+            while self.activated == False:
+                rclpy.spin_once(self, timeout_sec=0.1)
+
+            while route_index < len(fastest_path) and self.activated:
+                    x, y, theta = fastest_path[route_index]
+                    self.get_logger().info(f"Driving to object {route_index} at coordinates x={x}, y={y}, phi={theta}")
+                    self.publish_goal_marker(x, y, route_index, "g", delete=False)
+
+                    future = self.send_goal(x, y, theta)
+                    rclpy.spin_until_future_complete(self, future)
+                    goal_handle = future.result()
+
+                    if not goal_handle.accepted:
+                        self.get_logger().warn(f"Goal #{route_index} rejected")
+                        self.publish_goal_marker(x, y, route_index, "g", delete=True)
+                        route_index += 1
+                        continue
+
+                    self.get_logger().info(f"Goal #{route_index} accepted")
+                    result_future = goal_handle.get_result_async()
+                    start_time = time.time()
+
+                    while rclpy.ok() and not result_future.done():
+                        rclpy.spin_once(self, timeout_sec=0.1)
+
+                        if not self.activated:
+                            self.get_logger().info("Exploration deactivated. Saving current index.")
+                            goal_handle.cancel_goal_async()
+                            break
 
 
+                        if time.time() - start_time > 50.0:
+                            self.get_logger().warn(f"Goal #{route_index} timed out.")
+                            goal_handle.cancel_goal_async()
+                            break
+
+                    if result_future.done():
+                        result = result_future.result().result
+                        if result.error_code == 0:
+                            self.get_logger().info(f"Goal #{route_index} succeeded")
+                            self.publish_goal_marker(x, y, route_index, "g", delete=True)
+                        else:
+                            self.get_logger().warn(
+                                f"Goal #{route_index} failed - Code: {result.error_code}"
+                            )
+                            self.publish_goal_marker(x, y, route_index, "g", delete=True)
+                    else:
+                        self.get_logger().info(f"Goal #{route_index} not completed.")
+                        self.publish_goal_marker(x, y, route_index, "g", delete=True)
+
+            #Check to see if we have completed exploration
+            if route_index == (len(fastest_path)):
+                self.completed_exploration = True
+                break
+
+        self.get_logger().info("All operations completed.")
+
+
+
+    def euclidean(self,p1, p2):
+        return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+
+    def total_path_distance(self,path):
+        return sum(self.euclidean(path[i], path[i+1]) for i in range(len(path) - 1))
+
+    def find_shortest_path(self, points, start=None):
+        if start:
+            points = [start] + [p for p in points if p != start]
+        shortest = None
+        min_dist = float('inf')
+
+        for perm in itertools.permutations(points[1:]):
+            path = [points[0]] + list(perm)
+            dist = self.total_path_distance(path)
+            if dist < min_dist:
+                min_dist = dist
+                shortest = path
+
+        return shortest
+            
+
+    def make_pose(self, x, y):
+        pose = PoseStamped()
+        pose.header.frame_id = 'map'
+        pose.header.stamp = self.get_clock().now().to_msg()
+        pose.pose.position.x = x
+        pose.pose.position.y = y
+        pose.pose.orientation.w = 1.0
+        return pose
 
     def take_photo(self):
         # Create a request (empty if no parameters are required)
