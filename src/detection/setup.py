@@ -21,7 +21,7 @@ setup(
     tests_require=['pytest'],  # optional, if you're not using pytest you can remove this
     entry_points={
         'console_scripts': [
-            'detection = detection.detection69:main'
+            'detection = detection.detection_nomodel:main'
         ],
     },
 )

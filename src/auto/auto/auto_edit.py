@@ -64,13 +64,13 @@ class AutoNavigator(Node):
 
         #List for testing
         self.object_list=[
-            ("1", 1, 1, 0),
+            ("1", -2, -5, 0),
             ("2", -2, 2, 0),
             ("3", 3, 3, 0),
             ("4", 4, -4, 0),
             ("5", 5, 5, 0),
-            ("6", 6, 6, 0),
-            ("7", -7, 7, 0),
+            ("6", -7, -7, 0),
+            ("7", -7, -7, 0),
             ("r", -2, -2, 0),
             ("y", -5, -2, 0)
         ]
@@ -570,7 +570,7 @@ class AutoNavigator(Node):
                 selected_coords = []
                 for idx in indices:
                     if 0 <= idx < len(self.object_list):
-                        obj = self.object_list[idx]
+                        obj = self.object_list[idx-1]
                         selected_coords.append((str(idx), obj[1], obj[2], obj[3]))  # label, x, y, phi
                     else:
                         raise ValueError(f"Index {idx} out of range.")
@@ -637,9 +637,10 @@ class AutoNavigator(Node):
                             break
 
 
-                        if time.time() - start_time > 50.0:
+                        if time.time() - start_time > 100.0:
                             self.get_logger().warn(f"Goal #{route_index} timed out.")
                             goal_handle.cancel_goal_async()
+                            route_index += 1
                             self.clear_path()
                             break
 
@@ -647,7 +648,8 @@ class AutoNavigator(Node):
                         result = result_future.result().result
                         if result.error_code == 0:
                             self.get_logger().info(f"Goal #{route_index} succeeded")
-                            self.publish_goal_marker(x, y, route_index, "g", delete=True)
+                            route_index += 1
+                            self.publish_goal_marker(x, y, route_index-1, "g", delete=True)
                         else:
                             self.get_logger().warn(
                                 f"Goal #{route_index} failed - Code: {result.error_code}"
@@ -718,8 +720,8 @@ class AutoNavigator(Node):
 def main():
     rclpy.init()
     node = AutoNavigator()
-    node.explore()
-    #node.drive_to_points()
+    #node.explore()
+    node.drive_to_points()
     node.destroy_node()
     rclpy.shutdown()
 
