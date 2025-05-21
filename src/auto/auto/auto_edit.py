@@ -28,6 +28,11 @@ from nav2_simple_commander.robot_navigator import BasicNavigator
 import itertools
 from nav_msgs.msg import Path
 from std_msgs.msg import Header
+import matplotlib
+matplotlib.use('Agg')  # Use non-GUI backend
+import matplotlib.pyplot as plt
+import numpy as np
+
 
 class AutoNavigator(Node):
     def __init__(self):
@@ -304,7 +309,11 @@ class AutoNavigator(Node):
         return self._action_client.send_goal_async(goal_msg)
 
 
-    def lawnmower1(self, x_min, x_max, y_min, y_max, step):
+    def lawnmower1(self, x_min, x_max, y_min, y_max, step, avoided_points=None):
+
+        if avoided_points is None:
+            avoided_points = []
+
         goal_list = []
         first = True
 
@@ -319,11 +328,23 @@ class AutoNavigator(Node):
                 first = False
                 # Right to left, facing 180 degrees
                 row = [(float(x), float(y), 180.0) for x in reversed(range(x_min, x_max + 1, step))]
-            goal_list += row
+
+            # Filter out any points in avoided_points
+            filtered = []
+            for (xx, yy, yaw) in row:
+                # check against each avoided (ax, ay)
+                if not any(xx == ax and yy == ay for (ax, ay) in avoided_points):
+                    filtered.append((xx, yy, yaw, 1))
+
+            goal_list.extend(filtered)
 
         return goal_list
     
-    def lawnmower2(self, x_min, x_max, y_min, y_max, step):
+    def lawnmower2(self, x_min, x_max, y_min, y_max, step, avoided_points=None):
+
+        if avoided_points is None:
+            avoided_points = []
+
         goal_list = []
 
         for x in reversed(range(x_min, x_max + 1, step)):
@@ -331,11 +352,27 @@ class AutoNavigator(Node):
                 row = [(float(x), float(y), 270.0) for y in reversed(range(y_min, y_max + 1, step))]               
             else:
                 row = [(float(x), float(y), 90.0) for y in range(y_min, y_max + 1, step)]
-            goal_list += row
+
+            # Filter out any points in avoided_points
+            filtered = []
+            for (xx, yy, yaw) in row:
+                # check against each avoided (ax, ay)
+                if not any(xx == ax and yy == ay for (ax, ay) in avoided_points):
+                    filtered.append((xx, yy, yaw, 2))
+
+            goal_list.extend(filtered)
 
         return goal_list
     
-    def lawnmower3(self, x_min, x_max, y_min, y_max, step):
+    def lawnmower3(self, x_min, x_max, y_min, y_max, step, avoided_points=None):
+
+        if avoided_points is None:
+            avoided_points = []
+
+        avoided_points.append((3,0))
+        avoided_points.append((6,0))
+
+
         goal_list = []
         count = 0
 
@@ -349,8 +386,15 @@ class AutoNavigator(Node):
             else:
                 # Right to left, facing 180 degrees
                 row = [(float(x), float(y), 180.0) for x in reversed(range(x_min, x_max + 1, step))]
-            goal_list += row
-            count += 1
+            
+            # Filter out any points in avoided_points
+            filtered = []
+            for (xx, yy, yaw) in row:
+                # check against each avoided (ax, ay)
+                if not any(xx == ax and yy == ay for (ax, ay) in avoided_points):
+                    filtered.append((xx, yy, yaw, 3))
+
+            goal_list.extend(filtered)
 
         return goal_list
 
@@ -372,7 +416,7 @@ class AutoNavigator(Node):
             self.get_logger().info(f"Diff x: {diff_x}")
 
             if (abs(diff_x) > center_tolerance):
-                self.current_twist.angular.z = float(min(max(diff_x/3000,-0.1),-0.05))
+                self.current_twist.angular.z = float(max(min(diff_x/3000,0.1),0.05))
             else:
                 self.get_logger().info(f"Facing Object")
                 self.object_heading = math.radians(self.heading)
@@ -457,20 +501,86 @@ class AutoNavigator(Node):
             #     rclpy.spin_once(self, timeout_sec=0.1)
             #     continue
 
+            avoided_points = [(-6,6), (-6,3), (-3,6)]
+
             if not self.goal_list:
                 # First-time initialization
                 x_min, x_max = -6, 6
                 y_min, y_max = -6, 6
                 step = 3
                 self.goal_list = (
-                    self.lawnmower1(x_min, x_max, 0, y_max, step)
-                    + self.lawnmower2(x_min, x_max, y_min, y_max, step)
-                    + self.lawnmower3(x_min, x_max, y_min, 0, step)
+                    self.lawnmower1(x_min, x_max, 0, y_max, step, avoided_points = avoided_points)
+                    + self.lawnmower2(x_min, x_max, y_min, y_max, step, avoided_points = avoided_points)
+                    + self.lawnmower3(x_min, x_max, y_min, 0, step, avoided_points = avoided_points)
                 )
                 self.get_logger().info(f"Generated {len(self.goal_list)} goals")
+                #self.get_logger().info(f"Goals: {self.goal_list}")
+
+            goals = self.goal_list
+
+            # define a colour for each source
+            colours = {
+                1: 'tab:blue',
+                2: 'tab:orange',
+                3: 'tab:green',
+            }
+
+            # Extract x, y, yaw
+            # x = [g[0] for g in self.goal_list]
+            # y = [g[1] for g in self.goal_list]
+            # yaw_deg = [g[2]+90 for g in self.goal_list]
+            # yaw_rad = np.radians(yaw_deg)
+
+            # Plot
+            # plt.figure(figsize=(15, 15))
+            # plt.plot(y, x, 'o-', label='Goal path')
+            # plt.quiver(y, x, np.cos(yaw_rad), np.sin(yaw_rad), scale=10, color='red', label='Orientation')
+            # plt.grid(False)
+            # plt.gca().set_aspect('equal')
+            # plt.gca().invert_xaxis()
+            # plt.xlabel("Y")
+            # plt.ylabel("X")
+            # plt.title("Exploration Goals and Orientations")
+            # plt.legend()
+            
+            # # Save to file
+            # plt.savefig("exploration_goals.png", dpi=300, bbox_inches='tight')
+            # plt.close()  # Optional: close the figure to free memory
+
+            plt.figure(figsize=(10,10))
+            ax = plt.gca()
+
+            for src_id, colour in colours.items():
+                # collect just the goals from that source
+                pts = [g for g in goals if g[3] == src_id]
+                if not pts:
+                    continue
+                x = np.array([p[0] for p in pts])
+                y = np.array([p[1] for p in pts])
+                yaw_rad = np.radians([p[2]+90 for p in pts])
+
+                # plot the path for this source
+                ax.plot(y, x, 'o-', color=colour, label=f'source {src_id}')
+
+                # draw orientation arrows
+                u = np.cos(yaw_rad)
+                v = np.sin(yaw_rad)
+                ax.quiver(y, x, u, v, color=colour, scale=10, width=0.005)
+
+            ax.set_aspect('equal')
+            plt.gca().invert_xaxis()
+            ax.grid(False)
+            ax.set_xlabel("Y")
+            ax.set_ylabel("X")
+            ax.set_title("Exploration Goals by Source")
+            ax.legend()
+
+            plt.savefig("exploration_by_source.png", dpi=300, bbox_inches='tight')
+            plt.close()
+
 
             while self.explore_index < len(self.goal_list) and self.activated:
-                x, y, theta = self.goal_list[self.explore_index]
+                x, y, theta, _ = self.goal_list[self.explore_index]
                 self.get_logger().info(f"Navigating to goal #{self.explore_index + 1}")
                 self.publish_goal_marker(x, y, self.explore_index, "g", delete=False)
 
@@ -720,8 +830,8 @@ class AutoNavigator(Node):
 def main():
     rclpy.init()
     node = AutoNavigator()
-    #node.explore()
-    node.drive_to_points()
+    node.explore()
+    #node.drive_to_points()
     node.destroy_node()
     rclpy.shutdown()
 

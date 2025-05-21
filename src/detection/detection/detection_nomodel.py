@@ -12,7 +12,9 @@ from geometry_msgs.msg import Point32
 from std_msgs.msg import Float32MultiArray, String
 from interfaces.srv import TakePhoto
 
- 
+ #  ros2 run detection detection
+ #  source install/setup.bash
+ # 
  
 class ColorDetectionNode(Node):
     def __init__(self):
@@ -85,11 +87,11 @@ class ColorDetectionNode(Node):
         cv_image_resized = cv2.resize(cv_image, (320, 240))  # Reduce resolution for inference
  
         # Call the function to detect cones (objects)
-        self.find_best_shape(cv_image, cv_image_resized)  
+        self.find_best_shape(cv_image)  
 
         self.processing_image = False
    
-    def find_best_shape(self, original_image, area_threshold=1500):
+    def find_best_shape(self, original_image, area_threshold=10000):
 
         image = original_image.copy() 
 
@@ -99,25 +101,28 @@ class ColorDetectionNode(Node):
         
         #Red ranges 
         lower_red1 = np.array([0, 120, 70]) 
-        upper_red1 = np.array([10, 255, 255]) 
+        upper_red1 = np.array([25, 255, 255]) 
         lower_red2 = np.array([170, 120, 70]) 
         upper_red2 = np.array([180, 255, 255]) 
 
-
         # Yellow range #CHNAGED HERE
-        lower_yellow = np.array([35, 100, 100]) 
-        upper_yellow = np.array([55, 255, 255])
+        # self.get_logger().info(f"changed yellow")
+        # lower_yellow = np.array([30, 100, 100]) 
+        # upper_yellow = np.array([65, 255, 255])
+
+        # lower_yellow = np.array([20, 100, 100])
+        # upper_yellow = np.array([30, 255, 255])
 
         # orange range
-        #TODO:
-        lower_orange = np.array([20, 120, 120])
-        upper_orange = np.array([35, 255, 255])
+        # lower_orange = np.array([20, 120, 120])
+        # upper_orange = np.array([35, 255, 255])
 
         mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
         mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
-        mask3 = cv2.inRange(hsv, lower_yellow, upper_yellow)
-        mask4 = cv2.inRange(hsv, lower_orange, upper_orange)
-        mask = cv2.bitwise_or(mask1, mask2, mask3)
+        # mask3 = cv2.inRange(hsv, lower_yellow, upper_yellow)
+        # mask4 = cv2.inRange(hsv, lower_orange, upper_orange)
+        # mask = cv2.bitwise_or(mask1, mask2, mask3, mask4)
+        mask = mask1 | mask2 
         
         mask_blur = cv2.GaussianBlur(mask, (5, 5), 0)
         kernel = np.ones((7, 7), np.uint8)
@@ -130,11 +135,15 @@ class ColorDetectionNode(Node):
         max_area = -1
         biggest_box = None
 
+        # self.get_logger().info(f"Number of contours: {len(contours)}")
+
         for cnt in contours:
             epsilon = 0.0005 * cv2.arcLength(cnt, True)
             approx = cv2.approxPolyDP(cnt, epsilon, True)
 
             area = cv2.contourArea(approx)
+
+            # self.get_logger().info(f"Area of contour: {area}")
 
             if area > area_threshold:
 
@@ -148,16 +157,24 @@ class ColorDetectionNode(Node):
 
                 # plot contour and aspect ration in purple
                 # AREA IS CONTOUR AREA!!!
-                label = f"AR: {aspect_ratio}, A: {area}"
-                cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 255), 3)
+                label = f"AR: {aspect_ratio:.2f}, A: {area:.1f}"
+                cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 255), 2)
                 cv2.putText(image, label, (x1, y2 + 40), cv2.FONT_HERSHEY_SIMPLEX,
                 1.5, (255, 0, 255), 4)
 
-                # Check if it's square-ish or upright rectangle
-                # if 0.6 <= aspect_ratio <= 1.3: # or aspect_ratio < 0.85:
-                if area > max_area:
-                    max_area = area
-                    biggest_box = approx
+                # Check if it's square-ish or upright rectangle - square bucket
+                if (0.8 <= aspect_ratio <= 1.2) and (50000 <= area <= 120000): 
+                    self.get_logger().info(f"Probably a small bucket")
+                    if area > max_area:
+                        max_area = area
+                        biggest_box = approx
+
+                elif (0.7 <= aspect_ratio <= 0.9) and (110000 <= area):
+                    self.get_logger().info(f"Probably the big red bucket")
+                    if area > max_area:
+                        max_area = area
+                        biggest_box = approx
+
 
         if max_area > 0:
 
@@ -166,7 +183,7 @@ class ColorDetectionNode(Node):
             self.object_bb = biggest_box
 
             # make bb green
-            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 4)
             label = f"BOBJECT"
             cv2.putText(image, label, (x1, y1 + 40), cv2.FONT_HERSHEY_SIMPLEX,
                 1.5, (0, 255, 0), 4)
