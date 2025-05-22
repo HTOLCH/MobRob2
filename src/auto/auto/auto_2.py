@@ -31,7 +31,7 @@ import ast
 import itertools
 from nav_msgs.msg import Path
 from std_msgs.msg import Header
-
+import string
 
 class AutoNavigator(Node):
     def __init__(self):
@@ -62,9 +62,6 @@ class AutoNavigator(Node):
         self.bb_item = None
 
         self.heading = 0.0
-
-        #List that stores the already scanned items/objects 
-        self.object_list= []
 
         #Bounding box subscription
         self.subscription = self.create_subscription(
@@ -113,15 +110,15 @@ class AutoNavigator(Node):
 
         #List for testing
         self.object_list=[
-            ("1", -2, -5, 0),
-            ("2", -2, 2, 0),
-            ("3", 3, 3, 0),
-            ("4", 4, -4, 0),
-            ("5", 5, 5, 0),
-            ("6", -7, -7, 0),
-            ("7", -7, -7, 0),
-            ("r", -2, -2, 0),
-            ("y", -5, -2, 0)
+            ("1", -2, -5, 0, "f"),
+            ("2", -2, 2, 0, "f"),
+            ("3", 3, 3, 0, "f"),
+            ("4", 4, -4, 0, "f"),
+            ("5", 5, 5, 0, "f"),
+            ("6", -7, -7, 0, "f"),
+            ("7", -7, -7, 0, "f"),
+            ("r", -2, -2, 0, "f"),
+            ("y", -5, -2, 0, "f")
         ]
 
         self.activated = False
@@ -260,15 +257,15 @@ class AutoNavigator(Node):
         object_in_list = False
 
         #Only set true if the number/ object detected has not already been stored:
-        for i, obj in enumerate(self.object_list):
-            if obj[0] == self.bb_item:
+        for obj in self.object_list:
+            if obj[0] == str(self.bb_item) and obj[4] == "n": #Found the same object that is found during test
                 object_in_list = True
                 self.get_logger().info("Detected object has already been stored, ignoring.")         
         
         if not object_in_list:
             self.get_logger().info("Detected object has not been stored, pausing mapping...")
             self.bounding_box_detected = True
-            
+        
     def clear_path(self):
         empty_path = Path()
         empty_path.header = Header()
@@ -299,38 +296,6 @@ class AutoNavigator(Node):
         return self._action_client.send_goal_async(goal_msg)
 
     def handle_bounding_box(self):
-        self.get_logger().info("Detected object. Turning to face it...")
-
-        aligned = False
-        center_tolerance = 100
-        # P Controller to align to object using bounding_box_center_x
-        while not aligned:
-            #Spin rclpy to update bounding box.
-            rclpy.spin_once(self, timeout_sec=0.05)
-
-            self.get_logger().info(f"Received Bounding Box: {self.bb_item}")
-            center_x = (self.bb_x1 + self.bb_x2) / 2
-            image_center_x = 600
-            diff_x = image_center_x - center_x
-            
-            self.get_logger().info(f"Diff x: {diff_x}")
-
-            if (abs(diff_x) < 1000):
-                self.current_twist.angular.z = float(min(max(-abs(diff_x)/3000,-0.1),-0.05))
-
-            if (abs(diff_x) < center_tolerance):
-                #The waypoint heading needs to be set as the current heading
-                self.get_logger().info(f"Facing Object")
-                self.object_heading = math.radians(self.heading)
-
-                #Stop turning.
-                self.current_twist.angular.z = float(0.0)
-
-                aligned = True
-
-            self.twist_pub.publish(self.current_twist)
-
-        sleep(1)
 
         # Take photo
         self.take_photo()
@@ -341,19 +306,16 @@ class AutoNavigator(Node):
         #Call marker function
         self.publish_goal_marker(self.x_location, self.y_location, self.bb_item, "r", delete=False)
 
-        #Add item to the list of already scanned items:
-        #self.object_list.append(self.bb_item)
-
-        # Search for an existing entry in self.object_list
+        # Store in list
+ 
         for i, obj in enumerate(self.object_list):
-            if obj[0] == self.bb_item:  # Match based on bb_item
+            if obj[0] == str(self.bb_item):  # Only override if we find the same item and it's not a failsafe in the list.
                 # Override the existing values
-                self.object_list[i] = (self.bb_item, self.x_location, self.y_location, 0)
+                self.object_list[i] = (self.bb_item, self.x_location, self.y_location, 0, "n")
                 break  # Stop once the item is updated
-        else:
-            # If item does not exist, add it to the list
-            self.object_list.append((self.bb_item, self.x_location, self.y_location, 0))
 
+        #Print new item list
+        self.get_logger().info(f"Object list:\n{self.object_list}")
 
         # Resume normal path
         self.bounding_box_detected = False
@@ -389,7 +351,7 @@ class AutoNavigator(Node):
         start_time = time.time()
         self.outside_bounds = False
 
-        while (time.time() - start_time) < (20 * 60):  # 20 minutes 
+        while (time.time() - start_time) < (20 * 60):  # 20 minutes
             rclpy.spin_once(self, timeout_sec=2)
 
             #sleep(1)
@@ -426,11 +388,18 @@ class AutoNavigator(Node):
             self.get_logger().info(f"Y: {y}")  
 
             #If we reach the edge of the map, or find an object, turn to an angle behind the pioneer.
-            max_distance = max(abs(x), abs(y))
 
             self.get_logger().info(f"Outside bounds?: {self.outside_bounds}")
 
-            if x > 6 and not self.outside_bounds:
+            x_min = -4.0
+            x_max = 6.0
+            y_min = -6.0
+            y_max = 6.0
+
+            #Mode switch gap
+            msg = 0.1
+
+            if x > x_max and not self.outside_bounds:
                 self.get_logger().warn("Outside bounds Adjusting...")
                 self.outside_bounds = True  # Set flag
 
@@ -439,7 +408,7 @@ class AutoNavigator(Node):
                 #Turn to this angle
                 self.turn_to_angle(desired_angle)
             
-            if x < -6.0 and not self.outside_bounds:
+            if x < x_min and not self.outside_bounds:
                 self.get_logger().warn("Outside bounds! Adjusting...")
                 self.outside_bounds = True  # Set flag
 
@@ -448,7 +417,7 @@ class AutoNavigator(Node):
                 #Turn to this angle
                 self.turn_to_angle(desired_angle)
             
-            if y > 6 and not self.outside_bounds:
+            if y > y_max and not self.outside_bounds:
                 self.get_logger().warn("Outside bounds! Adjusting...")
                 self.outside_bounds = True  # Set flag
 
@@ -457,7 +426,7 @@ class AutoNavigator(Node):
                 #Turn to this angle
                 self.turn_to_angle(desired_angle)
             
-            if y < -6 and not self.outside_bounds:
+            if y < y_min and not self.outside_bounds:
                 self.get_logger().warn("Outside bounds! Adjusting...")
                 self.outside_bounds = True  # Set flag
 
@@ -466,9 +435,25 @@ class AutoNavigator(Node):
                 #Turn to this angle
                 self.turn_to_angle(desired_angle)
 
-            if max_distance < 5.9:
-                #We are back within bounds
+            if y < (y_max - msg) and y > (y_min + msg) and x < (x_max - msg) and x > (x_min + msg):
+                #We are back within bounds, allow outside bounds functions to run again.
                 self.outside_bounds = False
+
+            #If the distance now is < 0.7, trigger an estop.
+            if float(self.min_forward_float) < 0.7:
+                #Stop the robot.
+                self.current_twist.linear.x = 0.0
+                self.current_twist.angular.z = 0.0
+                self.twist_pub.publish(self.current_twist)
+
+                #Call rosbag to save published data.
+                
+
+                #Keep in estop while loop until auto mode turns to false (deadman triggered)
+                while self.activated == True:
+                    rclpy.spin_once(self, timeout_sec=0.1)
+
+                #auto mode has switched off, resume...
 
             #Check lidar distance 
             if float(self.min_forward_float) < 1.4:
@@ -483,16 +468,17 @@ class AutoNavigator(Node):
                 msg.data = True
                 self.activate_detection.publish(msg)
 
-                #Wait 10 seconds for a bounding box to come back
+                sleep(1)
+
                 # Wait for bounding box response
-                detection_timeout = 4  # Wait time (seconds)
+                detection_timeout = 8  # Wait time (seconds)
                 start_time = time.time()
 
                 bounding_box_received = False  # Track detection status
 
                 while (time.time() - start_time) < detection_timeout:
                     rclpy.spin_once(self, timeout_sec=0.1)  # Process incoming messages
-                    if self.bounding_box_detected:  # Assuming you have a flag set in a callback
+                    if self.bounding_box_detected: 
                         bounding_box_received = True
                         break
 
@@ -504,12 +490,23 @@ class AutoNavigator(Node):
                 else:
                     self.get_logger().info("Did not detect an object.")
 
+                #Turn off detection
+                msg = Bool()
+                msg.data = False
+                self.activate_detection.publish(msg)
+
                 #Regardless, turn away and continue exploration
-                desired_angle = random.uniform(self.heading + 70, self.heading + 170)
+                #Choose whether to go left or right
+                direction = random.uniform(1,2)
+
+                if direction == 1:
+                    desired_angle = random.uniform(self.heading + 90, self.heading + 160)
+                else:
+                    desired_angle = random.uniform(self.heading - 90, self.heading - 160)
+
                 #Turn to this angle
                 self.turn_to_angle(desired_angle)
 
-                #Continue...
 
         self.get_logger().info("Exploration complete")
         #sleep(2)   
@@ -564,6 +561,7 @@ class AutoNavigator(Node):
         self.get_logger().info(f"targets list: {drive_targets}")
         #Find the fastest path between all the targets
         positions = [(x, y, phi) for (_, x, y, phi) in drive_targets]
+
         fastest_path = self.find_shortest_path(positions, start=(0,0,0))
 
         fastest_path.append(home_position)

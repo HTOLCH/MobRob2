@@ -42,7 +42,7 @@ RUN apt-get update && \
     python3-tk \
     python3-rosdep \
     python3-pip \
-    ros-jazzy-rosbag2-py \
+    ros-jazzy-rosbag2 \
     #python3-opencv \
     x11-apps \
     && rm -rf /var/lib/apt/lists/*
