@@ -6,15 +6,16 @@ import cv2
 import numpy as np
 import time
 import math
+from torchvision import transforms
 # from ultralytics import YOLO
 import os
 from geometry_msgs.msg import Point32
 from std_msgs.msg import Float32MultiArray, String
 from interfaces.srv import TakePhoto
+from .utils import *
 
  #  ros2 run detection detection
  #  source install/setup.bash
- # 
  
 class ColorDetectionNode(Node):
     def __init__(self):
@@ -50,7 +51,7 @@ class ColorDetectionNode(Node):
         # Get the directory of the current script
         script_dir = os.path.dirname(os.path.abspath(__file__))
         # model_path = os.path.join(script_dir, "best.pt")
- 
+
         # for cone
         self.latest_bb = None
  
@@ -69,6 +70,29 @@ class ColorDetectionNode(Node):
         self.latest_image = None
 
         self.processing_image = False
+
+        self.number_prediction = None
+
+        # For Number Detection
+        self.start_time = None
+        self.finish_time = None
+        # Get the directory of the current script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.model_path = os.path.join(script_dir, "mnist_model_new.pth")
+        self.model = Net()
+
+        # hopefully load model once!!!
+        self.model.load_state_dict(torch.load(self.model_path, map_location=torch.device('cpu')))
+        self.model.eval()
+
+
+        # timer for images
+        self.image_saved = False
+        self.start_time = time.time()
+
+        # Ensure directory exists
+        self.save_path = os.path.expanduser('~/workspace/MobRob-Part2/cams_images')
+        os.makedirs(self.save_path, exist_ok=True)
            
     def image_callback(self, msg):
         #if self.frame_counter % 2 == 0:  # Skip frames
@@ -79,6 +103,9 @@ class ColorDetectionNode(Node):
  
     def process_image(self, msg):
         # Convert the ROS image message to an OpenCV image
+
+        self.start_time = time.time()
+
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
  
         self.latest_image = cv_image
@@ -87,35 +114,59 @@ class ColorDetectionNode(Node):
         cv_image_resized = cv2.resize(cv_image, (320, 240))  # Reduce resolution for inference
  
         # Call the function to detect cones (objects)
-        self.find_best_shape(cv_image)  
+        self.detect(cv_image)  
+
+        self.finish_time = time.time
+
+        # model_time = (self.start_time - self.finish_time) * 1000
+
+        # self.get_logger().info(f"processing time: {model_time:.2f} ms")
 
         self.processing_image = False
-   
-    def find_best_shape(self, original_image, area_threshold=10000):
+    
+    def predict_mnist_digit(self, centered_image):
+
+        self.get_logger().info("In predict nmist_digit")
+
+        resized = cv2.resize(centered_image, (28, 28), interpolation=cv2.INTER_AREA)
+        digit_resized = cv2.resize(resized, (24, 24), interpolation=cv2.INTER_AREA)
+
+        canvas = np.zeros((28, 28), dtype=np.uint8)
+        offset = (28 - 24) // 2
+        canvas[offset:offset+24, offset:offset+24] = digit_resized
+
+        canvas[0, :] = canvas[-1, :] = 0
+        canvas[:, 0] = canvas[:, -1] = 0
+
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,))
+        ])
+        img_tensor = transform(canvas).unsqueeze(0)
+
+        # Predict using preloaded model
+        with torch.no_grad():
+            output = self.model(img_tensor)
+            probs = F.softmax(output, dim=1)
+            pred = output.argmax(dim=1).item()
+            confidence = probs[0, pred].item()
+
+        return pred, confidence
+
+    
+    def find_best_shape(self, original_image, area_threshold = 10000):
+
+        self.get_logger().info(f"Detecting object!")
 
         image = original_image.copy() 
 
-        bbox_coordinates = String()
-
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         
-        #Red ranges 
+        #Red extended for yellow ranges 
         lower_red1 = np.array([0, 120, 70]) 
         upper_red1 = np.array([25, 255, 255]) 
         lower_red2 = np.array([170, 120, 70]) 
         upper_red2 = np.array([180, 255, 255]) 
-
-        # Yellow range #CHNAGED HERE
-        # self.get_logger().info(f"changed yellow")
-        # lower_yellow = np.array([30, 100, 100]) 
-        # upper_yellow = np.array([65, 255, 255])
-
-        # lower_yellow = np.array([20, 100, 100])
-        # upper_yellow = np.array([30, 255, 255])
-
-        # orange range
-        # lower_orange = np.array([20, 120, 120])
-        # upper_orange = np.array([35, 255, 255])
 
         mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
         mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
@@ -134,6 +185,7 @@ class ColorDetectionNode(Node):
 
         max_area = -1
         biggest_box = None
+        biggest_bb = None
 
         # self.get_logger().info(f"Number of contours: {len(contours)}")
 
@@ -163,36 +215,193 @@ class ColorDetectionNode(Node):
                 1.5, (255, 0, 255), 4)
 
                 # Check if it's square-ish or upright rectangle - square bucket
-                if (0.8 <= aspect_ratio <= 1.2) and (20000 <= area <= 45000): 
+                if (0.8 <= aspect_ratio <= 1.2) and (20000 <= area <= 60000): 
                     self.get_logger().info(f"Probably a small bucket")
                     if area > max_area:
                         max_area = area
                         biggest_box = approx
+                        biggest_bb = bbox
 
-                elif (0.7 <= aspect_ratio <= 0.9) and (140000 <= area <= 160000):
+                elif (0.7 <= aspect_ratio <= 0.9) and (80000 <= area):
                     self.get_logger().info(f"Probably the big red bucket")
                     if area > max_area:
                         max_area = area
                         biggest_box = approx
+                        biggest_bb = bbox
 
         if max_area > 0:
 
             # detected an object
             self.get_logger().info(f"Found an object")
-            self.object_bb = biggest_box
+            # self.object_bb = biggest_box
 
             # make bb green
             cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 4)
             label = f"BOBJECT"
             cv2.putText(image, label, (x1, y1 + 40), cv2.FONT_HERSHEY_SIMPLEX,
                 1.5, (0, 255, 0), 4)
+            
+            return image, biggest_bb
 
         else:
 
             # no objects detected
             self.get_logger().info(f"No objects detected")
-            self.object_bb = None
-               
+            # self.object_bb = None
+
+            return None, None
+
+    def detect_numbers(self, image, result):
+
+        img = image.copy()
+
+        self.get_logger().info(f"Found Square Region")
+
+        x, y, w, h = result
+
+        binary_output, message = process_bbox_region2(img, (x, y, w, h), debug=False)
+
+        if binary_output is None:
+            # FIX
+            self.get_logger().info(message)
+            return None, None
+
+        binary_output, message = extract_largest_black_object(binary_output, debug=False)
+
+        if binary_output is None:
+            # FIX
+            self.get_logger().info(message)
+            return None, None
+
+        binary_output = resize_to_fixed_aspect(binary_output)
+
+        binary_output = thicken_thin_lines(binary_output)
+
+        if binary_output is None:
+            # FIX
+            self.get_logger().info("Something went wrong here")
+            return None, None
+
+        # Isolate largest black component
+        inverted = cv2.bitwise_not(binary_output)
+        contours, _ = cv2.findContours(inverted, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            largest = max(contours, key=cv2.contourArea)
+            mask = np.zeros_like(binary_output)
+            cv2.drawContours(mask, [largest], -1, 255, thickness=cv2.FILLED)
+            final_output = np.full_like(binary_output, 255)
+            final_output[mask == 255] = binary_output[mask == 255]
+        else:
+            final_output = binary_output.copy()
+
+        # Final center & scale
+        inv = cv2.bitwise_not(final_output)
+        centered, message = center_and_scale_object(inv, target_size=(512, 512), padding=60)
+
+        if centered is None:
+            self.get_logger().info(message)
+            return None, None
+
+        # no number
+        if np.all(centered == 0) or np.all(centered == 255):
+            self.get_logger().info("No Number Found after center and scale")
+            return None, None
+        
+        else:
+            pred, conf = self.predict_emnist_digit(centered)
+            if conf >= 0.85 and result:
+
+                x_box, y_box, w_box, h_box = result
+
+                label_text = f"{pred:.2f} ({conf:.2f})"
+                cv2.rectangle(img, (x_box, y_box), (x_box + w_box, y_box + h_box), (0, 255, 0), 3)
+                cv2.putText(img, label_text, (x_box, y_box - 10), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.8, (0, 255, 0), 2, cv2.LINE_AA)
+
+                self.get_logger().info(f"High Confidence Detection: {label_text}")
+
+                # take picture (??)
+
+                return img, pred
+
+            else:
+                self.get_logger().info(f"Number detected but not enough confidence: pred: {pred:2f}, conf: {conf:2f}")
+
+                return None, None
+   
+    def detect(self, original_image, area_threshold=10000):
+
+        bbox_coordinates = String()
+
+        # self.get_logger().info("hello")
+        
+        image = original_image.copy() 
+
+        height, width = image.shape[:2]
+
+        # crop a quarter off each side of the image for detection...
+        top = int(height*0.10)
+        # bottom = int(height*0.85)
+        left = int(width*0.25)
+        right = int(width*0.75)
+
+        blacked = image.copy()
+
+        blacked[:, :left] = 0
+        blacked[:, right:] = 0
+        blacked[:top, :] = 0
+
+        # max bbox of paper smaller than 100,000 pixels??
+
+        bbox_coordinates = String()
+
+        hsv = cv2.cvtColor(blacked, cv2.COLOR_BGR2HSV)
+
+        # First detect for number (??)
+        # lower_white = np.array([0, 0, 190])
+        # upper_white = np.array([180, 90, 255])
+        # mask = cv2.inRange(hsv, lower_white, upper_white)
+        # clean = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((11, 11), np.uint8))
+
+ 
+        result = extract_most_square_region(blacked, debug=False)
+
+        # square region found
+        # run for 3 seconds using each (?)
+
+        if result:
+
+            image_returned, pred = self.detect_numbers(blacked, result)
+
+            if image_returned is not None:
+                image = image_returned
+
+                self.object_bb = result
+                self.number_prediction = pred
+
+            else:
+                cv2.rectangle(blacked, (result[0], result[1]),
+                                (result[0] + result[2], result[1] + result[3]),
+                                (0, 255, 0), 2)
+                
+                self.object_bb = result
+                self.number_prediction = None
+
+
+        # if no square region -> detect for buckets
+        # else:
+
+        #     image_returned, bbox = self.find_best_shape(blacked)
+
+        #     if image_returned is not None:
+        #         image = image_returned
+        #         self.object_bb = bbox
+        #         self.number_prediction = 0
+
+        #     else:
+        #         self.object_bb = None
+        #         self.number_prediction = None
+
         # Check if image is a valid NumPy array with at least 2 dimensions (height, width)
         if not isinstance(image, np.ndarray) or image.ndim < 2:
             self.get_logger().info("[WARNING] Invalid image format. Skipping publish.")
@@ -204,11 +413,23 @@ class ColorDetectionNode(Node):
             self.get_logger().info(f"[ERROR] Failed to publish image: {e}")
             image = original_image.copy()
             self.publish_image(image)
+
+        
+        # current_time = time.time()
+        # if not self.image_saved and current_time - self.start_time >= 10:
+        #     try:
+        #         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        #         filename = os.path.join(self.save_path, 'saved_image.png')
+        #         cv2.imwrite(filename, cv_image)
+        #         self.get_logger().info(f'Image saved to {filename}')
+        #         self.image_saved = True
+        #     except Exception as e:
+        #         self.get_logger().error(f'Failed to save image: {e}')
             
- 
+
         # Publish bounding box coordinates
         if self.object_bb is not None:
-            bbox_coordinates.data = str(list(self.object_bb) + [None])
+            bbox_coordinates.data = str(list(self.object_bb) + [self.number_prediction])
 
         self.object_detected.publish(bbox_coordinates)
  

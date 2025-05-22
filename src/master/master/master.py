@@ -66,8 +66,8 @@ class Master(Node):
         self.canvas.pack(pady=10)
 
         self.cmd_vel_publisher = self.create_publisher(Twist, 'cmd_vel', 10)
-
         self.auto_status_publisher = self.create_publisher(Bool, 'auto_status', 10)
+        self.skip_map_publisher = self.create_publisher(Bool, 'skip_mapping', 10)
 
         # Subscriber to the 'joy' topic
         self.joy_subscription = self.create_subscription(
@@ -179,6 +179,10 @@ class Master(Node):
 
         self.operation_state = "T"
 
+        self.skip_mapping = False
+
+        self.skip_publish_counter = 0
+
         # Start periodic updates
         self.update_gui()
 
@@ -188,6 +192,13 @@ class Master(Node):
         #dead man switch condition for manual or automated mode
         if msg.buttons[7] == 1:
             self.inside = True
+
+            if msg.buttons[3] == 1:
+                self.get_logger().info("Skipping mapping...")
+                self.skip_mapping = True
+            else:
+                self.skip_mapping = False
+                
             #self.get_logger().info(f"X Axes: {-msg.axes[0]}")
             #self.get_logger().info(f"Y Axes: {msg.axes[1]}")
 
@@ -215,18 +226,7 @@ class Master(Node):
                             else:
                                 self.get_logger().info("Exiting Super Saiyan Mode")
                                 self.super_saiyan = False
-                    if i == 3:
-                        try:
-                            self.get_logger().info("Sending cold start to GPS...")
-                            ser = serial.Serial("/dev/ttyACM0", 9600, timeout=1)
-                            ser.write(b"$PMTK104*37\r\n")  # Cold start command
-                            ser.close()
-                            self.get_logger().info("Cold start command sent.")
-                        except Exception as e:
-                            self.get_logger().error(f"Failed to reset GPS: {e}")
 
-
-                    
 
             if self.manual_mode:
                 if self.super_saiyan:
@@ -350,6 +350,21 @@ class Master(Node):
         msg.data = self.automatic_mode
         self.cmd_vel_publisher.publish(self.current_twist)
         self.auto_status_publisher.publish(msg)
+
+        if self.skip_mapping:
+            if self.skip_publish_counter < 10:   
+                self.skip_publish_counter +=1
+                msg = Bool()
+                msg.data = True
+                self.skip_map_publisher.publish(msg)
+            else:
+                #Stop publishing.
+                self.skip_publish_counter = 0
+                self.skip_mapping = False
+        else:
+            msg = Bool()
+            msg.data = False
+            self.skip_map_publisher.publish(msg)
 
     def update_canvas_image(self):
         # If the image already exists on the canvas, update it, otherwise create a new one

@@ -42,6 +42,7 @@ RUN apt-get update && \
     python3-tk \
     python3-rosdep \
     python3-pip \
+    ros-jazzy-rosbag2-py \
     #python3-opencv \
     x11-apps \
     && rm -rf /var/lib/apt/lists/*
@@ -77,6 +78,8 @@ RUN pip install --break-system-packages blobconverter
 RUN pip install --break-system-packages opencv-python
 RUN pip install --break-system-packages depthai
 RUN pip install --break-system-packages numpy
+RUN pip install --break-system-packages torch
+RUN pip install --break-system-packages torchvision
 #RUN pip install --break-system-packages depthai
 
 RUN apt-get update && apt-get install -y libgl1

@@ -32,7 +32,7 @@ import matplotlib
 matplotlib.use('Agg')  # Use non-GUI backend
 import matplotlib.pyplot as plt
 import numpy as np
-
+import threading
 
 class AutoNavigator(Node):
     def __init__(self):
@@ -118,7 +118,7 @@ class AutoNavigator(Node):
         self.latest_odom = None
         self.create_subscription(Odometry, "/odom", self.odom_callback, 10)
 
-        self.explore_index = 0  # Start at the first goal
+        self.explore_index = 40  # Start at the first goal
         self.goal_list = []     # Store the full goal list here
 
         #self.navigator = BasicNavigator()
@@ -195,7 +195,10 @@ class AutoNavigator(Node):
         
         #640 samples in sim,
         #1440 samples on richbeam lidar
-        lidar_samples = 640
+        lidar_samples = 1440
+
+        lower_detection = int(lidar_samples/2.6)
+        upper_detection = int(lidar_samples/1.6)
 
         lower_right = int(lidar_samples/4.5)
         upper_right = int(lidar_samples/2.4)
@@ -210,7 +213,8 @@ class AutoNavigator(Node):
             regions = {
                 'right': msg.ranges[lower_right:upper_right],
                 'forward': msg.ranges[lower_forward:upper_forward],
-                'left': msg.ranges[lower_left:upper_left]
+                'left': msg.ranges[lower_left:upper_left],
+                'detection': msg.ranges[lower_detection:upper_detection]
             }
 
             #self.get_logger().info(f"Ranges length: {len(msg.ranges)}")
@@ -219,6 +223,7 @@ class AutoNavigator(Node):
             filtered_right = valid_ranges(regions['right'])
             filtered_forward = valid_ranges(regions['forward'])
             filtered_left = valid_ranges(regions['left'])
+            filtered_detection = valid_ranges(regions['detection'])
 
             # Find minimum in each region
             if filtered_right:
@@ -235,6 +240,10 @@ class AutoNavigator(Node):
                 self.min_left = f"{min(filtered_left):.2f}"
             else:
                 self.min_left = "Out of range"
+            if filtered_detection:
+                self.min_detection = f"{min(filtered_detection):.2f}"
+            else:
+                self.min_detection = "Out of range"
 
         except ValueError as e:
             self.get_logger().error(f"Error processing ranges: {e}")
@@ -242,6 +251,7 @@ class AutoNavigator(Node):
 
 
         self.distances = f"Left: {self.min_left} | Forward: {self.min_forward} | Right: {self.min_right}"
+        self.distances = f"Detection smallest distance {self.min_detection}"
         # Publish the distances
         message = String()
         message.data = self.distances
@@ -525,28 +535,6 @@ class AutoNavigator(Node):
                 3: 'tab:green',
             }
 
-            # Extract x, y, yaw
-            # x = [g[0] for g in self.goal_list]
-            # y = [g[1] for g in self.goal_list]
-            # yaw_deg = [g[2]+90 for g in self.goal_list]
-            # yaw_rad = np.radians(yaw_deg)
-
-            # Plot
-            # plt.figure(figsize=(15, 15))
-            # plt.plot(y, x, 'o-', label='Goal path')
-            # plt.quiver(y, x, np.cos(yaw_rad), np.sin(yaw_rad), scale=10, color='red', label='Orientation')
-            # plt.grid(False)
-            # plt.gca().set_aspect('equal')
-            # plt.gca().invert_xaxis()
-            # plt.xlabel("Y")
-            # plt.ylabel("X")
-            # plt.title("Exploration Goals and Orientations")
-            # plt.legend()
-            
-            # # Save to file
-            # plt.savefig("exploration_goals.png", dpi=300, bbox_inches='tight')
-            # plt.close()  # Optional: close the figure to free memory
-
             plt.figure(figsize=(10,10))
             ax = plt.gca()
 
@@ -565,7 +553,7 @@ class AutoNavigator(Node):
                 # draw orientation arrows
                 u = np.cos(yaw_rad)
                 v = np.sin(yaw_rad)
-                ax.quiver(y, x, u, v, color=colour, scale=10, width=0.005)
+                ax.quiver(y, x, u, v, color=colour, scale=10, width=0.01)
 
             ax.set_aspect('equal')
             plt.gca().invert_xaxis()
@@ -634,30 +622,41 @@ class AutoNavigator(Node):
                         break
 
                 if result_future.done():
+
                     result = result_future.result().result
+
                     if result.error_code == 0:
                         self.get_logger().info(f"Goal #{self.explore_index + 1} succeeded")
                         self.clear_path()
                         self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
+                        self.explore_index += 1  # Only advance if we attempted the goal
+
+                    elif result.error_code == 102:
+                        self.get_logger().error(f"Goal #{self.explore_index + 1} error 102, trying again...")
+                        self.clear_path()
+                        self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
+
                     else:
                         self.get_logger().warn(
                             f"Goal #{self.explore_index + 1} failed - Code: {result.error_code}"
                         )
                         self.clear_path()
                         self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
+                        self.explore_index += 1
+
                 else:
                     self.get_logger().info(f"Goal #{self.explore_index + 1} not completed.")
                     self.clear_path()
                     self.publish_goal_marker(x, y, self.explore_index, "g", delete=True)
+                    self.explore_index += 1
 
-                self.explore_index += 1  # Only advance if we attempted the goal
 
             #Check to see if we have completed exploration
-            if self.explore_index == (len(self.goal_list) - 1):
+            if self.explore_index >= (len(self.goal_list)):
                 self.completed_exploration = True
                 self.get_logger().info("Exploration complete, driving to detected numbers...")
 
-        self.drive_to_points(self)
+        self.drive_to_points()
 
 
     def drive_to_points(self):
@@ -830,10 +829,27 @@ class AutoNavigator(Node):
 def main():
     rclpy.init()
     node = AutoNavigator()
-    node.explore()
-    #node.drive_to_points()
+
+    # Start exploration in a separate thread
+    explore_thread = threading.Thread(target=node.explore)
+    explore_thread.start()
+
+    # Use MultiThreadedExecutor to handle subscriptions
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(node)
+    executor.spin()  # Keeps subscriptions running
+
+    explore_thread.join()  # Ensure exploration completes before shutdown
     node.destroy_node()
     rclpy.shutdown()
+    # rclpy.init()
+    # node = AutoNavigator()
+    # node.explore()
+
+    
+    # #node.drive_to_points()
+    # node.destroy_node()
+    # rclpy.shutdown()
 
 # def main(args=None):
 #     rclpy.init(args=args)

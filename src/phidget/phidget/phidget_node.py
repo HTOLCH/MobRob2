@@ -34,7 +34,7 @@ class SpatialPublisher(Node):
         roll, pitch, yaw = self.quaternion_to_euler2(quaternion)
 
         # Convert yaw (heading) to degrees
-        heading_in_degrees = math.degrees(yaw) + 235 - 37 - 53 - 65 + 20
+        heading_in_degrees = math.degrees(yaw) + 235 - 37 - 53 - 65 + 20 - 30
         self.publish_spatial_data(heading_in_degrees)
         # Print the heading value (in degrees)
         #self.get_logger().info(f"IMU Heading: {heading_in_degrees:.2f} degrees")

@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'auto = auto.auto_edit:main'
+            'auto = auto.auto_2:main'
         ],
     },
 )
